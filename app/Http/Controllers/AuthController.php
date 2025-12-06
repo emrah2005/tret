@@ -1,0 +1,86 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+
+class AuthController extends Controller
+{
+    public function showRegister()
+    {
+        return view('auth.register');
+    }
+
+    public function register(Request $request)
+    {
+        $data = $request->validate([
+            'name'      => 'required|string|max:255',
+            'email'     => 'required|email|max:255|unique:users,email',
+            'password'  => 'required|string|min:6|confirmed',
+            'user_type' => 'required|in:influencer,brand',
+        ]);
+
+        $user = User::create([
+            'name'     => $data['name'],
+            'email'    => $data['email'],
+            'password' => Hash::make($data['password']),
+            'role'     => $data['user_type'], // 'influencer' or 'brand'
+            'status'   => 'active',
+        ]);
+
+        Auth::login($user);
+
+        if ($user->role === 'influencer') {
+            return redirect()->route('influencer.step1');
+        }
+
+        return redirect()->route('business.step1');
+    }
+
+    public function showLogin()
+    {
+        return view('auth.login');
+    }
+
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email'    => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        if (!Auth::attempt($credentials, $request->boolean('remember'))) {
+            return back()->withErrors([
+                'email' => 'These credentials do not match our records.',
+            ])->withInput();
+        }
+
+        $request->session()->regenerate();
+
+        $user = Auth::user();
+
+        if ($user->role === 'influencer') {
+            return redirect()->route('dashboard.influencer');
+        } elseif ($user->role === 'brand') {
+            return redirect()->route('dashboard.business');
+        } elseif ($user->role === 'admin') {
+            return redirect()->route('admin.dashboard');
+        }
+
+        return redirect()->route('home');
+    }
+
+    public function logout(Request $request)
+    {
+        Auth::logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('home');
+    }
+}
+
